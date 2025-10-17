@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movie Details Finder</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #141414;
+            color: #ffffff;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            background: #242424;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            width: 100%;
+            max-width: 1200px;
+        }
+        h1 {
+            text-align: center;
+            color: #e50914;
+        }
+        .search-box {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+        input[type="text"] {
+            flex-grow: 1;
+            padding: 15px;
+            font-size: 16px;
+            border: 1px solid #444;
+            border-radius: 8px;
+            background-color: #333;
+            color: #fff;
+        }
+        button {
+            padding: 15px 25px;
+            font-size: 16px;
+            background-color: #e50914;
+            color: white;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #f6121d;
+        }
+        #loader {
+            text-align: center;
+            font-weight: bold;
+            display: none;
+            padding: 20px;
+        }
+        #results {
+            margin-top: 30px;
+            display: none;
+        }
+        .movie-grid {
+            display: grid;
+            grid-template-columns: 250px 1fr 1fr;
+            gap: 30px;
+            align-items: start;
+        }
+        .poster-container img {
+            width: 100%;
+            border-radius: 8px;
+        }
+        .poster-container a.download-button {
+            display: block;
+            width: calc(100% - 20px);
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #e50914;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+            text-align: center;
+            cursor: pointer;
+        }
+         .poster-container a.download-button:hover {
+            background-color: #f6121d;
+        }
+        .info-item {
+            margin-bottom: 15px;
+        }
+        .info-item strong {
+            display: block;
+            color: #aaa;
+            margin-bottom: 5px;
+        }
+        .info-item .imdb-logo {
+            height: 14px;
+            vertical-align: -2px;
+            margin-right: 5px;
+        }
+        .trailer-container {
+            position: relative;
+            padding-bottom: 56.25%;
+            height: 0;
+            overflow: hidden;
+            border-radius: 8px;
+        }
+        .trailer-container iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        .trailer-container .no-trailer {
+             text-align: center;
+             padding-top: 50%;
+             color: #888;
+        }
+        @media (max-width: 900px) {
+            .movie-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Movie Details Finder</h1>
+        <div class="search-box">
+            <input type="text" id="movieTitle" placeholder="Enter movie title (e.g., Inception)">
+            <button id="fetchButton">Fetch Details</button>
+        </div>
+        <div id="loader">Loading...</div>
+        <div id="results">
+            </div>
+    </div>
+
+    <script>
+        const fetchButton = document.getElementById('fetchButton');
+        const movieTitleInput = document.getElementById('movieTitle');
+        const resultsDiv = document.getElementById('results');
+        const loader = document.getElementById('loader');
+
+        fetchButton.addEventListener('click', getMovieDetails);
+        movieTitleInput.addEventListener('keyup', (event) => {
+            if (event.key === 'Enter') {
+                getMovieDetails();
+            }
+        });
+
+        function formatDuration(minutes) {
+            if (!minutes || minutes === 0) {
+                return 'N/A';
+            }
+            const hours = Math.floor(minutes / 60);
+            const mins = minutes % 60;
+            return `${hours}h ${mins}m`;
+        }
+
+        async function getMovieDetails() {
+            // --- API KEYS ---
+            const tmdbApiKey = '8b4abc2bd0a93f88acc2686a56d541ac';
+            // **Your OMDb API Key is now added.**
+            const omdbApiKey = '575eb0b8';
+
+            const movieTitle = movieTitleInput.value.trim();
+            if (!movieTitle) {
+                alert('Please enter a movie title.');
+                return;
+            }
+
+            loader.style.display = 'block';
+            resultsDiv.style.display = 'none';
+            resultsDiv.innerHTML = '';
+
+            try {
+                // --- Call 1: Search TMDb for the movie ID ---
+                const searchResponse = await fetch(`https://api.themoviedb.org/3/search/movie?api_key=${tmdbApiKey}&query=${encodeURIComponent(movieTitle)}`);
+                const searchData = await searchResponse.json();
+                if (!searchData.results || searchData.results.length === 0) throw new Error('Movie not found on TMDb.');
+                
+                const movieId = searchData.results[0].id;
+
+                // --- Call 2: Get full details and videos from TMDb ---
+                const detailsResponse = await fetch(`https://api.themoviedb.org/3/movie/${movieId}?api_key=${tmdbApiKey}&append_to_response=credits,videos`);
+                const movie = await detailsResponse.json();
+
+                // --- Call 3: Use IMDb ID to get IMDb rating from OMDb ---
+                let imdbRating = 'N/A';
+                const imdbId = movie.imdb_id;
+                if (imdbId) {
+                    const omdbResponse = await fetch(`https://www.omdbapi.com/?i=${imdbId}&apikey=${omdbApiKey}`);
+                    const omdbData = await omdbResponse.json();
+                    if (omdbData.Response === 'True' && omdbData.imdbRating) {
+                        imdbRating = omdbData.imdbRating;
+                    }
+                }
+
+                // --- Process all the data ---
+                const director = movie.credits.crew.find(person => person.job === 'Director')?.name || 'N/A';
+                const starring = movie.credits.cast.slice(0, 5).map(actor => actor.name).join(', ');
+                const posterUrl = movie.poster_path ? `https://image.tmdb.org/t/p/original${movie.poster_path}` : 'https://via.placeholder.com/400x575.png?text=No+Poster';
+                const releaseYear = movie.release_date ? movie.release_date.split('-')[0] : 'N/A';
+                const fullReleaseDate = movie.release_date || 'N/A';
+                const suggestedFilename = `${movie.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_poster.jpg`;
+                const genres = movie.genres.map(genre => genre.name).join(', ');
+                const duration = formatDuration(movie.runtime);
+
+                let trailerKey = null;
+                if (movie.videos && movie.videos.results.length > 0) {
+                    const officialTrailer = movie.videos.results.find(video => video.type === 'Trailer' && video.site === 'YouTube');
+                    trailerKey = officialTrailer ? officialTrailer.key : null;
+                }
+
+                // --- Display Results ---
+                const movieHTML = `
+                    <div class="movie-grid">
+                        <div class="poster-container">
+                            <img src="${posterUrl}" alt="Movie Poster">
+                            <a href="${posterUrl}" download="${suggestedFilename}" class="download-button">Download HD Poster</a>
+                        </div>
+                        <div class="info-container">
+                            <h2>${movie.title} (${releaseYear})</h2>
+                            <div class="info-item">
+                                <strong>Rating</strong>
+                                <span>
+                                    <img src="https://upload.wikimedia.org/wikipedia/commons/6/69/IMDB_Logo_2016.svg" class="imdb-logo" alt="IMDb Logo">
+                                    ${imdbRating} / 10
+                                </span>
+                                <span style="font-size: 0.8em; color: #aaa;">(TMDb: ⭐ ${movie.vote_average.toFixed(1)})</span>
+                            </div>
+                            <div class="info-item">
+                                <strong>Release Date</strong>
+                                <span>${fullReleaseDate}</span>
+                            </div>
+                            <div class="info-item">
+                                <strong>Duration</strong>
+                                <span>${duration}</span>
+                            </div>
+                            <div class="info-item">
+                                <strong>Genres</strong>
+                                <span>${genres}</span>
+                            </div>
+                            <div class="info-item">
+                                <strong>Director</strong>
+                                <span>${director}</span>
+                            </div>
+                            <div class="info-item">
+                                <strong>Starring Name</strong>
+                                <span>${starring}</span>
+                            </div>
+                            <div class="info-item">
+                                <strong>Description</strong>
+                                <span>${movie.overview}</span>
+                            </div>
+                        </div>
+                        <div class="trailer-container">
+                            ${trailerKey 
+                                ? `<iframe src="https://www.youtube.com/embed/${trailerKey}?autoplay=1&mute=1&loop=1&playlist=${trailerKey}" allow="autoplay; encrypted-media" allowfullscreen></iframe>`
+                                : '<div class="no-trailer">No Trailer Available</div>'
+                            }
+                        </div>
+                    </div>
+                `;
+                resultsDiv.innerHTML = movieHTML;
+                resultsDiv.style.display = 'block';
+
+            } catch (error) {
+                console.error(error);
+                resultsDiv.innerHTML = `<p style="color: #e50914; text-align: center;">${error.message}</p>`;
+                resultsDiv.style.display = 'block';
+            } finally {
+                loader.style.display = 'none';
+            }
+        }
+    </script>
+
+</body>
+</html>
